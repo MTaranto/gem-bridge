@@ -1,0 +1,28 @@
+# Binaries
+gem-bridge
+*.exe
+*.out
+
+# Go test and coverage files
+*.test
+coverage.out
+coverage.html
+
+# Build directories
+bin/
+dist/
+build/
+
+# Environment files
+.env
+.env.*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temporary files
+tmp/
+*.log
