@@ -15,16 +15,18 @@ The goal is to build a secure local daemon that acts as a bridge between browser
 - GitHub repository: `MTaranto/gem-bridge`
 - Main module: `github.com/mtaranto/gem-bridge`
 - Main branch: `main`
-- Current feature branch: `feat/configurable-workspace`
+- Current working branch: `main`
 
 ## Current Status
 
-The project already has an initial Go structure with:
+The project currently has a CLI-based Go prototype with:
 
 - `cmd/gem-bridge/main.go`
 - `internal/security/workspace.go`
-- `internal/tools/files.go`
 - `internal/security/workspace_test.go`
+- `internal/tools/files.go`
+- `docs/PROJECT_CONTEXT.md`
+- `docs/ARCHITECTURE.md`
 - `README.md`
 - `.gitignore`
 - `go.mod`
@@ -35,21 +37,26 @@ The initial commit was created and pushed to GitHub:
 feat: initialize secure local bridge
 ```
 
-A second feature branch was created:
+Pull Request #1 was opened from `feat/configurable-workspace` into `main`, reviewed, and merged.
 
-```text
-feat/configurable-workspace
-```
-
-This branch added support for configurable workspace root handling and automated tests for workspace path validation.
-
-The feature commit was created and pushed:
+The merged feature branch included:
 
 ```text
 feat: add configurable workspace root
+docs: add project context
 ```
 
-`go test ./...` passed successfully after the configurable workspace changes.
+After the PR merge, the architecture overview was added directly to `main`:
+
+```text
+docs: add architecture overview
+```
+
+The latest confirmed local state:
+
+- `main` is aligned with `origin/main`.
+- Working tree is clean.
+- Latest commit on `main`: `docs: add architecture overview`.
 
 ## Core Principles
 
@@ -77,7 +84,7 @@ Gem Bridge should follow these principles:
 5. **Portfolio-quality engineering**
    - The project should evolve incrementally.
    - Git history should stay clean.
-   - Features should be developed in branches.
+   - Feature branches should be used for code, security-sensitive changes, and larger documentation updates.
    - Commits should follow Conventional Commits with lowercase descriptions.
 
 ## Development Guidelines
@@ -92,7 +99,7 @@ Use professional Go practices:
 - Add tests for security-sensitive behavior.
 - Run formatting and tests before committing.
 
-Before each commit, validate changes with:
+Before each commit or merge, validate changes with:
 
 ```bash
 go fmt ./...
@@ -106,6 +113,7 @@ Use Conventional Commits, for example:
 feat: add configurable workspace root
 fix: block symlink workspace escape
 docs: update project context
+docs: add architecture overview
 test: add workspace security tests
 ```
 
@@ -159,7 +167,25 @@ Errors are returned as:
 }
 ```
 
-In the current CLI version, failed requests may also return exit status `1`. This is expected for CLI behavior. In a future daemon/server mode, failed tool requests should not crash the daemon.
+In the current CLI version, failed requests may also return exit status `1`. This is acceptable for CLI behavior. In a future daemon/server mode, failed tool requests should not crash the daemon.
+
+## Current Workspace Behavior
+
+Implemented behavior:
+
+- Added `--workspace` CLI flag.
+- Default workspace root is `.`.
+- Workspace root is resolved to an absolute path.
+- Workspace root is resolved through symlink evaluation.
+- User paths are required to be relative.
+- Existing paths and parent paths are checked for symlink escapes.
+- Automated tests cover workspace path validation.
+
+Example usage:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"readFile","path":"README.md"}'
+```
 
 ## Security Model
 
@@ -183,79 +209,87 @@ Examples of blocked paths:
 /home/user/.ssh/id_rsa
 ../../.env
 ../../.config
+C:\Users\user\.ssh\id_rsa
+\\server\share\secret.txt
 ```
 
-## Current Feature Branch
+## Architecture Documentation
 
-Branch:
+The project now includes:
 
 ```text
-feat/configurable-workspace
+docs/ARCHITECTURE.md
 ```
 
-Implemented behavior:
+This document records the main architectural decisions:
 
-- Added `--workspace` CLI flag.
-- New default workspace root is `.`.
-- Workspace root is resolved to an absolute path.
-- Workspace root is resolved through symlink evaluation.
-- User paths are still required to be relative.
-- Existing paths and parent paths are checked for symlink escapes.
-- Added automated tests for workspace path validation.
+- Keep the current prototype simple and CLI-based.
+- Separate responsibilities by domain before creating platform-specific abstractions.
+- Prepare for Linux, macOS, and Windows without overengineering early.
+- Keep the security layer shared across all future transports.
+- Avoid unrestricted shell execution.
+- Prefer explicit tools such as `gitStatus`, `gitDiff`, `goTest`, and `goFmt`.
+- Add cross-platform CI later for Linux, macOS, and Windows.
 
-Validation already performed:
+## Cross-Platform Strategy
 
-```bash
-go test ./...
-```
+Gem Bridge should support Linux, macOS, and Windows.
 
-Expected result:
+The current focus is to keep the core logic portable while isolating platform-specific behavior only when necessary.
+
+Cross-platform concerns to handle carefully:
+
+- Filesystem path behavior
+- Windows absolute paths and UNC paths
+- Symlink handling
+- Local configuration directories through `os.UserConfigDir()`
+- Native Messaging host registration
+- Controlled command execution without exposing arbitrary shell access
+
+Avoid broad premature abstractions such as a generic `OSAdapter` until real platform-specific needs appear.
+
+## Current Git History
+
+Confirmed relevant commits:
 
 ```text
-?    github.com/mtaranto/gem-bridge/cmd/gem-bridge      [no test files]
-?    github.com/mtaranto/gem-bridge/internal/tools      [no test files]
-ok   github.com/mtaranto/gem-bridge/internal/security
+docs: add architecture overview
+Merge pull request #1 from MTaranto/feat/configurable-workspace
+docs: add project context
+feat: add configurable workspace root
+feat: initialize secure local bridge
 ```
 
 ## Immediate Next Steps
 
 The next recommended steps are:
 
-1. Open a Pull Request on GitHub for `feat/configurable-workspace`.
-2. Review the PR description and changed files.
-3. Merge the PR into `main`.
-4. Pull/update local `main`.
-5. Start the next feature branch.
-
-Suggested PR title:
-
-```text
-feat: add configurable workspace root
-```
-
-Suggested PR description:
-
-```text
-Adds support for configuring the workspace root through a CLI flag and introduces automated tests for workspace path resolution and escape prevention.
-```
+1. Add `docs/SECURITY_MODEL.md`.
+2. Document filesystem threat model and safety rules.
+3. Define safe file writing rules before implementing write support.
+4. Add safe file writing with strict tests.
+5. Add Git tools in small increments:
+   - `gitStatus`
+   - `gitDiff`
+   - later: controlled commit support
 
 ## Near-Term Roadmap
 
 Recommended next features, in order:
 
-1. Add `docs/PROJECT_CONTEXT.md`.
-2. Add `docs/SECURITY_MODEL.md`.
-3. Add safe file writing with strict rules.
-4. Add Git tools:
+1. Add `docs/SECURITY_MODEL.md`.
+2. Add safe file writing with strict rules.
+3. Add Git tools:
    - `gitStatus`
    - `gitDiff`
    - later: controlled commit support
-5. Add structured request and response packages.
-6. Add WebSocket transport for local development.
-7. Add browser extension prototype.
-8. Add Native Messaging support.
-9. Add approval flow for sensitive operations.
-10. Add structured logging.
+4. Add structured request and response packages.
+5. Add WebSocket transport for local development.
+6. Add browser extension prototype.
+7. Add Native Messaging support.
+8. Add approval flow for sensitive operations.
+9. Add structured logging.
+10. Add cross-platform CI for Linux, macOS, and Windows.
 
 ## Long-Term Vision
 
@@ -295,11 +329,12 @@ The user prefers:
 - Go code that is idiomatic, modular, and professional.
 - Direct but educational guidance.
 - Incremental development with clean Git history.
-- Feature branches.
+- Feature branches for code changes and larger documentation updates.
 - Conventional Commits with lowercase descriptions.
 - Validation before commits.
 - Full-file replacements when that reduces syntax or continuity errors.
 - Using Git as the source of truth if the chat becomes long or context is uncertain.
+- Avoiding unnecessary command-style boxes in explanations; reserve code blocks mainly for commands, code, filenames, commit messages, or exact outputs.
 
 ## Continuity Rule
 
@@ -316,5 +351,7 @@ For file-specific uncertainty, ask for:
 ```bash
 sed -n '1,220p' path/to/file.go
 ```
+
+Do not ask for file content unnecessarily when the file is already available in the project sources and the local Git state is confirmed clean and aligned with `origin/main`.
 
 Do not guess the current local code state when Git output or file contents are needed.
