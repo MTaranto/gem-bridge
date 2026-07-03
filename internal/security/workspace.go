@@ -10,23 +10,34 @@ import (
 //
 // All file operations must resolve paths through this type before touching
 // the disk. This prevents callers from accessing files outside the configured
-// workspace root by using absolute paths or path traversal sequences.
+// workspace root by using absolute paths, path traversal sequences, or unsafe
+// symbolic links.
 type Workspace struct {
 	Root string
 }
 
 // NewWorkspace creates a new restricted workspace from the provided root path.
 //
-// The root path is converted to an absolute, clean path to ensure all later
-// comparisons are performed against a stable filesystem boundary.
+// The root path is converted to an absolute, clean, symlink-resolved path to
+// ensure all later comparisons are performed against a stable filesystem
+// boundary.
 func NewWorkspace(root string) (*Workspace, error) {
+	if strings.TrimSpace(root) == "" {
+		return nil, errors.New("workspace root cannot be empty")
+	}
+
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
 
+	resolvedRoot, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Workspace{
-		Root: filepath.Clean(absRoot),
+		Root: filepath.Clean(resolvedRoot),
 	}, nil
 }
 
@@ -54,14 +65,40 @@ func (w *Workspace) ResolvePath(userPath string) (string, error) {
 		return "", err
 	}
 
-	relPath, err := filepath.Rel(w.Root, absFullPath)
-	if err != nil {
-		return "", err
-	}
+	resolvedPath := resolveExistingPathOrParent(absFullPath)
 
-	if relPath == ".." || strings.HasPrefix(relPath, "../") {
+	if !w.isInside(resolvedPath) {
 		return "", errors.New("access outside the workspace is blocked")
 	}
 
-	return absFullPath, nil
+	return resolvedPath, nil
+}
+
+// isInside checks whether a resolved path is still inside the workspace root.
+func (w *Workspace) isInside(path string) bool {
+	relPath, err := filepath.Rel(w.Root, path)
+	if err != nil {
+		return false
+	}
+
+	return relPath != ".." && !strings.HasPrefix(relPath, ".."+string(filepath.Separator))
+}
+
+// resolveExistingPathOrParent resolves symlinks for an existing path.
+//
+// If the final path does not exist yet, it attempts to resolve the parent
+// directory. This helps prevent future write operations from escaping through
+// symlinked directories.
+func resolveExistingPathOrParent(path string) string {
+	if resolvedPath, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(resolvedPath)
+	}
+
+	parentDir := filepath.Dir(path)
+
+	if resolvedParent, err := filepath.EvalSymlinks(parentDir); err == nil {
+		return filepath.Join(resolvedParent, filepath.Base(path))
+	}
+
+	return filepath.Clean(path)
 }
