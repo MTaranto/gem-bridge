@@ -1,5 +1,7 @@
 # Gem Bridge
 
+[Leia em português brasileiro](./README.pt-br.md)
+
 Gem Bridge is a local AI tooling bridge written in Go.
 
 The goal of this project is to provide a secure local daemon that exposes controlled filesystem and development tools to an AI assistant running in a browser-based interface.

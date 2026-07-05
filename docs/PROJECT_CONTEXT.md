@@ -27,7 +27,9 @@ The project currently has a CLI-based Go prototype with:
 - `internal/tools/files.go`
 - `docs/PROJECT_CONTEXT.md`
 - `docs/ARCHITECTURE.md`
+- `docs/ARCHITECTURE.pt-br.md`
 - `README.md`
+- `README.pt-br.md`
 - `.gitignore`
 - `go.mod`
 
@@ -219,6 +221,7 @@ The project now includes:
 
 ```text
 docs/ARCHITECTURE.md
+docs/ARCHITECTURE.pt-br.md
 ```
 
 This document records the main architectural decisions:
@@ -230,6 +233,28 @@ This document records the main architectural decisions:
 - Avoid unrestricted shell execution.
 - Prefer explicit tools such as `gitStatus`, `gitDiff`, `goTest`, and `goFmt`.
 - Add cross-platform CI later for Linux, macOS, and Windows.
+
+## Documentation Language Strategy
+
+Public-facing documentation should be available in English and Brazilian Portuguese.
+
+English remains the primary language for GitHub discoverability and international readability. Brazilian Portuguese versions should be maintained alongside the English documents to support learning, review, and portfolio communication in Brazil.
+
+Each public document should include a clear link to its counterpart:
+
+```text
+README.md -> README.pt-br.md
+README.pt-br.md -> README.md
+docs/ARCHITECTURE.md -> docs/ARCHITECTURE.pt-br.md
+docs/ARCHITECTURE.pt-br.md -> docs/ARCHITECTURE.md
+```
+
+Future public documents should follow the same pattern, for example:
+
+```text
+docs/SECURITY_MODEL.md
+docs/SECURITY_MODEL.pt-br.md
+```
 
 ## Cross-Platform Strategy
 
@@ -264,7 +289,7 @@ feat: initialize secure local bridge
 
 The next recommended steps are:
 
-1. Add `docs/SECURITY_MODEL.md`.
+1. Add `docs/SECURITY_MODEL.md` and `docs/SECURITY_MODEL.pt-br.md`.
 2. Document filesystem threat model and safety rules.
 3. Define safe file writing rules before implementing write support.
 4. Add safe file writing with strict tests.
@@ -277,7 +302,7 @@ The next recommended steps are:
 
 Recommended next features, in order:
 
-1. Add `docs/SECURITY_MODEL.md`.
+1. Add `docs/SECURITY_MODEL.md` and `docs/SECURITY_MODEL.pt-br.md`.
 2. Add safe file writing with strict rules.
 3. Add Git tools:
    - `gitStatus`
@@ -324,7 +349,7 @@ Future tool categories may include:
 
 The user prefers:
 
-- Explanations in Portuguese.
+- Explanations in Brazilian Portuguese.
 - Code comments in English.
 - Go code that is idiomatic, modular, and professional.
 - Direct but educational guidance.

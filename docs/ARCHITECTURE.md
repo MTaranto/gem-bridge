@@ -1,5 +1,7 @@
 # Architecture
 
+[Leia em português brasileiro](./ARCHITECTURE.pt-br.md)
+
 ## Purpose
 
 Gem Bridge is a local-first tooling bridge written in Go.
