@@ -1,10 +1,13 @@
 package tools
 
 import (
+	"errors"
 	"os"
 
 	"github.com/mtaranto/gem-bridge/internal/security"
 )
+
+const maxWriteFileBytes = 64 * 1024
 
 // FileTools exposes safe filesystem operations for the local workspace.
 //
@@ -35,6 +38,38 @@ func (f *FileTools) ReadFile(path string) (string, error) {
 	}
 
 	return string(content), nil
+}
+
+// WriteFile creates a new text file inside the authorized workspace.
+//
+// This first implementation is intentionally conservative: it refuses to
+// overwrite existing files and limits content size. All paths must pass through
+// the workspace security layer before any write operation touches the disk.
+func (f *FileTools) WriteFile(path string, content string) error {
+	if len([]byte(content)) > maxWriteFileBytes {
+		return errors.New("file content exceeds maximum allowed size")
+	}
+
+	resolvedPath, err := f.Workspace.ResolvePath(path)
+	if err != nil {
+		return err
+	}
+
+	file, err := os.OpenFile(resolvedPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return errors.New("file already exists")
+		}
+
+		return err
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString(content); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ListDirectory returns the entries of a directory inside the workspace.
