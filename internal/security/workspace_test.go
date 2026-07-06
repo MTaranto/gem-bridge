@@ -58,7 +58,7 @@ func TestResolvePathRejectsEmptyPath(t *testing.T) {
 	}
 }
 
-func TestResolvePathRejectsAbsolutePath(t *testing.T) {
+func TestResolvePathRejectsAbsolutePaths(t *testing.T) {
 	root := t.TempDir()
 
 	workspace, err := NewWorkspace(root)
@@ -66,9 +66,43 @@ func TestResolvePathRejectsAbsolutePath(t *testing.T) {
 		t.Fatalf("expected workspace to be created: %v", err)
 	}
 
-	_, err = workspace.ResolvePath("/etc/passwd")
-	if err == nil {
-		t.Fatal("expected absolute path to be rejected")
+	tests := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "unix system path",
+			path: "/etc/passwd",
+		},
+		{
+			name: "unix home path",
+			path: "/home/marcio/.ssh/id_rsa",
+		},
+		{
+			name: "windows drive path with backslashes",
+			path: `C:\Users\Marcio\.ssh\id_rsa`,
+		},
+		{
+			name: "windows drive path with slashes",
+			path: "C:/Users/Marcio/.ssh/id_rsa",
+		},
+		{
+			name: "windows drive-relative path",
+			path: `C:Users\Marcio\.ssh\id_rsa`,
+		},
+		{
+			name: "windows unc path",
+			path: `\\server\share\secret.txt`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := workspace.ResolvePath(tt.path)
+			if err == nil {
+				t.Fatalf("expected absolute path %q to be rejected", tt.path)
+			}
+		})
 	}
 }
 
@@ -80,9 +114,27 @@ func TestResolvePathRejectsPathTraversal(t *testing.T) {
 		t.Fatalf("expected workspace to be created: %v", err)
 	}
 
-	_, err = workspace.ResolvePath("../outside.txt")
-	if err == nil {
-		t.Fatal("expected path traversal to be rejected")
+	tests := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "unix separator traversal",
+			path: "../outside.txt",
+		},
+		{
+			name: "windows separator traversal",
+			path: `..\outside.txt`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := workspace.ResolvePath(tt.path)
+			if err == nil {
+				t.Fatalf("expected path traversal %q to be rejected", tt.path)
+			}
+		})
 	}
 }
 

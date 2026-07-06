@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const windowsDriveSeparator = ':'
+
 // Workspace represents a restricted filesystem boundary.
 //
 // All file operations must resolve paths through this type before touching
@@ -48,15 +50,16 @@ func NewWorkspace(root string) (*Workspace, error) {
 // the authorized project directory and prevents tools from reading arbitrary
 // locations on the user's machine.
 func (w *Workspace) ResolvePath(userPath string) (string, error) {
-	if strings.TrimSpace(userPath) == "" {
+	trimmedPath := strings.TrimSpace(userPath)
+	if trimmedPath == "" {
 		return "", errors.New("path cannot be empty")
 	}
 
-	cleanUserPath := filepath.Clean(userPath)
-
-	if filepath.IsAbs(cleanUserPath) {
+	if isUnsafeAbsolutePath(trimmedPath) {
 		return "", errors.New("absolute paths are not allowed")
 	}
+
+	cleanUserPath := filepath.Clean(normalizePathSeparators(trimmedPath))
 
 	fullPath := filepath.Join(w.Root, cleanUserPath)
 
@@ -82,6 +85,43 @@ func (w *Workspace) isInside(path string) bool {
 	}
 
 	return relPath != ".." && !strings.HasPrefix(relPath, ".."+string(filepath.Separator))
+}
+
+// isUnsafeAbsolutePath rejects absolute path shapes from Unix and Windows.
+//
+// Gem Bridge receives paths from browser-based clients, not only from the local
+// operating system shell. Because of that, validation must reject Unix absolute
+// paths, Windows drive-qualified paths, and UNC/network paths regardless of the
+// operating system currently running the daemon.
+func isUnsafeAbsolutePath(path string) bool {
+	normalizedPath := strings.ReplaceAll(path, "\\", "/")
+
+	if strings.HasPrefix(normalizedPath, "/") {
+		return true
+	}
+
+	return hasWindowsDrivePrefix(normalizedPath)
+}
+
+// hasWindowsDrivePrefix reports whether a path starts with a Windows drive
+// prefix such as C:, C:\, or C:/.
+func hasWindowsDrivePrefix(path string) bool {
+	if len(path) < 2 {
+		return false
+	}
+
+	first := path[0]
+	isASCIIAlpha := (first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')
+
+	return isASCIIAlpha && path[1] == windowsDriveSeparator
+}
+
+// normalizePathSeparators converts client-provided separators to the current
+// operating system separator before cleaning and joining paths.
+func normalizePathSeparators(path string) string {
+	slashPath := strings.ReplaceAll(path, "\\", "/")
+
+	return filepath.FromSlash(slashPath)
 }
 
 // resolveExistingPathOrParent resolves symlinks for an existing path.
