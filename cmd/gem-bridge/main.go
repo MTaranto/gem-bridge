@@ -142,6 +142,21 @@ func main() {
 			Data:    data,
 		})
 
+	case "gitDiff":
+		data, err := gitTools.Diff()
+		if err != nil {
+			printJSON(Response{
+				Success: false,
+				Error:   err.Error(),
+			})
+			os.Exit(1)
+		}
+
+		printJSON(Response{
+			Success: true,
+			Data:    data,
+		})
+
 	default:
 		printJSON(Response{
 			Success: false,

@@ -20,6 +20,7 @@ Este projeto é desenhado em torno de três princípios centrais:
 - Leitura de arquivos
 - Criação segura de arquivos por `writeFile`
 - Inspeção segura de status Git por `gitStatus`
+- Inspeção segura de diff Git por `gitDiff`
 - Proteção contra paths vazios, paths absolutos, path traversal, paths Windows com unidade, paths UNC e escapes por symlink
 - Comportamento conservador de escrita que recusa sobrescrever arquivos existentes
 - Limite de tamanho para escrita de arquivos
@@ -111,6 +112,21 @@ Resposta esperada para um repositório limpo:
 }
 ```
 
+Inspecionar diff Git:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"gitDiff"}'
+```
+
+Resposta esperada para um repositório limpo:
+
+```json
+{
+  "success": true,
+  "data": ""
+}
+```
+
 Tentativas de sobrescrever um arquivo existente são bloqueadas na versão atual:
 
 ```bash
@@ -161,9 +177,9 @@ C:/Users/user/.ssh/id_rsa
 \\server\share\secret.txt
 ```
 
-A implementação atual de `writeFile` é intencionalmente conservadora. Ela cria apenas arquivos de texto novos, recusa sobrescrever arquivos existentes, limita o tamanho do conteúdo e resolve paths pela camada compartilhada de segurança do workspace antes de escrever no disco.
+As implementações atuais de ferramentas Git são intencionalmente restritas. `gitStatus` executa apenas uma operação Git explícita e permitida dentro do workspace autorizado. `gitDiff` executa um diff de arquivos rastreados contra `HEAD`, desativa helpers externos de diff e comandos de conversão de texto, e não aceita argumentos Git fornecidos pelo cliente. O Gem Bridge não expõe execução arbitrária de shell.
 
-A implementação atual de `gitStatus` é intencionalmente restrita. Ela executa apenas uma operação Git explícita e permitida dentro do workspace autorizado. O Gem Bridge não expõe execução arbitrária de shell.
+A implementação atual de `writeFile` é intencionalmente conservadora. Ela cria apenas arquivos de texto novos, recusa sobrescrever arquivos existentes, limita o tamanho do conteúdo e resolve paths pela camada compartilhada de segurança do workspace antes de escrever no disco.
 
 ## Integração contínua
 
@@ -186,14 +202,13 @@ windows-latest
 
 ## Roadmap
 
-- Adicionar ferramentas Git:
-  - `gitDiff`
 - Adicionar pacotes estruturados para request e response
 - Adicionar transporte WebSocket para desenvolvimento local
 - Adicionar integração com extensão de navegador
 - Adicionar suporte a Native Messaging
 - Adicionar fluxo de aprovação para operações sensíveis
 - Adicionar logging estruturado
+- Adicionar novas ferramentas Git apenas com regras explícitas de segurança
 - Expandir regras de mutação segura de arquivos quando necessário
 
 ## Por que este projeto existe
