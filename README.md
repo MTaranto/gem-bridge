@@ -20,6 +20,7 @@ This project is designed around three core principles:
 - File reading
 - Safe file creation through `writeFile`
 - Safe Git status inspection through `gitStatus`
+- Safe Git diff inspection through `gitDiff`
 - Protection against empty paths, absolute paths, path traversal, Windows drive paths, UNC paths, and symlink escapes
 - Conservative write behavior that refuses to overwrite existing files
 - File write size limit
@@ -111,6 +112,21 @@ Expected response for a clean repository:
 }
 ```
 
+Inspect Git diff:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"gitDiff"}'
+```
+
+Expected response for a clean repository:
+
+```json
+{
+  "success": true,
+  "data": ""
+}
+```
+
 Attempting to overwrite an existing file is blocked in the current version:
 
 ```bash
@@ -163,7 +179,7 @@ C:/Users/user/.ssh/id_rsa
 
 The current `writeFile` implementation is intentionally conservative. It creates new text files only, refuses to overwrite existing files, limits content size, and resolves paths through the shared workspace security layer before writing to disk.
 
-The current `gitStatus` implementation is intentionally narrow. It runs only an explicit, allowlisted Git status operation inside the authorized workspace. Gem Bridge does not expose arbitrary shell execution.
+The current Git tool implementations are intentionally narrow. `gitStatus` runs only an explicit, allowlisted Git status operation inside the authorized workspace. `gitDiff` runs a tracked-file diff against `HEAD`, disables external diff helpers and text conversion commands, and does not accept client-provided Git arguments. Gem Bridge does not expose arbitrary shell execution.
 
 ## Continuous Integration
 
@@ -186,14 +202,13 @@ windows-latest
 
 ## Roadmap
 
-- Add Git tools:
-  - `gitDiff`
 - Add structured request and response packages
 - Add WebSocket transport for local development
 - Add browser extension integration
 - Add Native Messaging support
 - Add approval flow for sensitive operations
 - Add structured logging
+- Add additional Git tools only with explicit safety rules
 - Expand safe file mutation rules when needed
 
 ## Why This Project Exists

@@ -87,6 +87,87 @@ func TestGitStatusShortFailsOutsideRepository(t *testing.T) {
 	}
 }
 
+func TestGitDiffReturnsEmptyDiffForCleanRepository(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	runGit(t, root, "init")
+	writeFile(t, root, "notes.txt", "hello from gem bridge\n")
+	commitAll(t, root, "initial commit")
+
+	workspace, err := security.NewWorkspace(root)
+	if err != nil {
+		t.Fatalf("expected workspace creation to succeed: %v", err)
+	}
+
+	gitTools := NewGitTools(workspace)
+
+	diff, err := gitTools.Diff()
+	if err != nil {
+		t.Fatalf("expected git diff to succeed: %v", err)
+	}
+
+	if diff != "" {
+		t.Fatalf("expected clean repository diff to be empty, got %q", diff)
+	}
+}
+
+func TestGitDiffReportsTrackedFileModification(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	runGit(t, root, "init")
+	writeFile(t, root, "notes.txt", "hello from gem bridge\n")
+	commitAll(t, root, "initial commit")
+
+	writeFile(t, root, "notes.txt", "hello from gem bridge\nupdated line\n")
+
+	workspace, err := security.NewWorkspace(root)
+	if err != nil {
+		t.Fatalf("expected workspace creation to succeed: %v", err)
+	}
+
+	gitTools := NewGitTools(workspace)
+
+	diff, err := gitTools.Diff()
+	if err != nil {
+		t.Fatalf("expected git diff to succeed: %v", err)
+	}
+
+	expectedParts := []string{
+		"diff --git a/notes.txt b/notes.txt",
+		"+updated line",
+	}
+
+	for _, expected := range expectedParts {
+		if !strings.Contains(diff, expected) {
+			t.Fatalf("expected diff to contain %q, got:\n%s", expected, diff)
+		}
+	}
+}
+
+func TestGitDiffFailsOutsideRepository(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+
+	workspace, err := security.NewWorkspace(root)
+	if err != nil {
+		t.Fatalf("expected workspace creation to succeed: %v", err)
+	}
+
+	gitTools := NewGitTools(workspace)
+
+	_, err = gitTools.Diff()
+	if err == nil {
+		t.Fatal("expected git diff to fail outside a repository")
+	}
+
+	if !strings.Contains(err.Error(), "git diff failed:") {
+		t.Fatalf("expected git diff failure message, got %q", err.Error())
+	}
+}
+
 func requireGit(t *testing.T) {
 	t.Helper()
 
@@ -104,5 +185,29 @@ func runGit(t *testing.T, dir string, args ...string) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(output))
+	}
+}
+
+func commitAll(t *testing.T, dir string, message string) {
+	t.Helper()
+
+	runGit(t, dir, "add", ".")
+	runGit(
+		t,
+		dir,
+		"-c", "user.name=Gem Bridge Tests",
+		"-c", "user.email=tests@example.com",
+		"commit",
+		"-m", message,
+	)
+}
+
+func writeFile(t *testing.T, root string, relativePath string, content string) {
+	t.Helper()
+
+	filePath := filepath.Join(root, relativePath)
+
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		t.Fatalf("expected test file write to succeed: %v", err)
 	}
 }
