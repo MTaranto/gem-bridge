@@ -4,7 +4,7 @@
 
 Gem Bridge is a local AI tooling bridge written in Go.
 
-The goal of this project is to provide a secure local daemon that exposes controlled filesystem and development tools to an AI assistant running in a browser-based interface.
+The goal of this project is to provide a secure local daemon that exposes controlled filesystem, Git, and development tools to an AI assistant running in a browser-based interface.
 
 This project is designed around three core principles:
 
@@ -19,6 +19,7 @@ This project is designed around three core principles:
 - Directory listing
 - File reading
 - Safe file creation through `writeFile`
+- Safe Git status inspection through `gitStatus`
 - Protection against empty paths, absolute paths, path traversal, Windows drive paths, UNC paths, and symlink escapes
 - Conservative write behavior that refuses to overwrite existing files
 - File write size limit
@@ -59,7 +60,9 @@ Brazilian Portuguese versions are available for public-facing documentation:
 │   │   └── workspace_test.go
 │   └── tools/
 │       ├── files.go
-│       └── files_test.go
+│       ├── files_test.go
+│       ├── git.go
+│       └── git_test.go
 ├── go.mod
 ├── README.md
 └── README.pt-br.md
@@ -91,6 +94,21 @@ Read the created file:
 
 ```bash
 go run ./cmd/gem-bridge --workspace . '{"tool":"readFile","path":"notes.txt"}'
+```
+
+Inspect Git status:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"gitStatus"}'
+```
+
+Expected response for a clean repository:
+
+```json
+{
+  "success": true,
+  "data": []
+}
 ```
 
 Attempting to overwrite an existing file is blocked in the current version:
@@ -145,6 +163,8 @@ C:/Users/user/.ssh/id_rsa
 
 The current `writeFile` implementation is intentionally conservative. It creates new text files only, refuses to overwrite existing files, limits content size, and resolves paths through the shared workspace security layer before writing to disk.
 
+The current `gitStatus` implementation is intentionally narrow. It runs only an explicit, allowlisted Git status operation inside the authorized workspace. Gem Bridge does not expose arbitrary shell execution.
+
 ## Continuous Integration
 
 The repository includes a GitHub Actions workflow that runs on pushes and pull requests to `main`.
@@ -167,7 +187,6 @@ windows-latest
 ## Roadmap
 
 - Add Git tools:
-  - `gitStatus`
   - `gitDiff`
 - Add structured request and response packages
 - Add WebSocket transport for local development
