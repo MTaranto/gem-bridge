@@ -2,14 +2,14 @@
 
 [Read in English](./README.md)
 
-Gem Bridge é uma bridge local de ferramentas de IA escrita em Go.
+Gem Bridge é uma ponte local para ferramentas de IA escrita em Go.
 
-O objetivo deste projeto é fornecer um daemon local seguro que exponha ferramentas controladas de filesystem e desenvolvimento para um assistente de IA em uma interface baseada em navegador.
+O objetivo deste projeto é fornecer um daemon local seguro que exponha ferramentas controladas de filesystem, Git e desenvolvimento para um assistente de IA executado em uma interface baseada em navegador.
 
 Este projeto é desenhado em torno de três princípios centrais:
 
-- **Execução local-first**: arquivos e comandos são tratados na máquina do usuário.
-- **Isolamento de workspace**: as ferramentas ficam restritas a um diretório autorizado do projeto.
+- **Execução local-first**: arquivos e comandos são manipulados na máquina do usuário.
+- **Isolamento de workspace**: as ferramentas ficam restritas a um diretório de projeto autorizado.
 - **Protocolo agnóstico de ferramenta**: o daemon deve poder ser usado por diferentes frontends de IA no futuro.
 
 ## Funcionalidades atuais
@@ -19,6 +19,7 @@ Este projeto é desenhado em torno de três princípios centrais:
 - Listagem de diretórios
 - Leitura de arquivos
 - Criação segura de arquivos por `writeFile`
+- Inspeção segura de status Git por `gitStatus`
 - Proteção contra paths vazios, paths absolutos, path traversal, paths Windows com unidade, paths UNC e escapes por symlink
 - Comportamento conservador de escrita que recusa sobrescrever arquivos existentes
 - Limite de tamanho para escrita de arquivos
@@ -59,7 +60,9 @@ As versões em inglês da documentação pública também estão disponíveis:
 │   │   └── workspace_test.go
 │   └── tools/
 │       ├── files.go
-│       └── files_test.go
+│       ├── files_test.go
+│       ├── git.go
+│       └── git_test.go
 ├── go.mod
 ├── README.md
 └── README.pt-br.md
@@ -91,6 +94,21 @@ Ler o arquivo criado:
 
 ```bash
 go run ./cmd/gem-bridge --workspace . '{"tool":"readFile","path":"notes.txt"}'
+```
+
+Inspecionar status Git:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"gitStatus"}'
+```
+
+Resposta esperada para um repositório limpo:
+
+```json
+{
+  "success": true,
+  "data": []
+}
 ```
 
 Tentativas de sobrescrever um arquivo existente são bloqueadas na versão atual:
@@ -145,6 +163,8 @@ C:/Users/user/.ssh/id_rsa
 
 A implementação atual de `writeFile` é intencionalmente conservadora. Ela cria apenas arquivos de texto novos, recusa sobrescrever arquivos existentes, limita o tamanho do conteúdo e resolve paths pela camada compartilhada de segurança do workspace antes de escrever no disco.
 
+A implementação atual de `gitStatus` é intencionalmente restrita. Ela executa apenas uma operação Git explícita e permitida dentro do workspace autorizado. O Gem Bridge não expõe execução arbitrária de shell.
+
 ## Integração contínua
 
 O repositório inclui um workflow do GitHub Actions que roda em pushes e pull requests para a `main`.
@@ -167,7 +187,6 @@ windows-latest
 ## Roadmap
 
 - Adicionar ferramentas Git:
-  - `gitStatus`
   - `gitDiff`
 - Adicionar pacotes estruturados para request e response
 - Adicionar transporte WebSocket para desenvolvimento local
@@ -181,10 +200,10 @@ windows-latest
 
 Assistentes modernos de IA são cada vez mais úteis para desenvolvimento de software, mas interfaces de IA baseadas em navegador normalmente não têm acesso direto e seguro aos arquivos locais de projeto de um desenvolvedor.
 
-Gem Bridge explora uma abordagem local-first em que um assistente de IA pode solicitar ações controladas por meio de um daemon pequeno e auditável rodando na própria máquina do desenvolvedor.
+Gem Bridge explora uma abordagem local-first em que um assistente de IA pode solicitar ações controladas por meio de um daemon pequeno e auditável executando na própria máquina do desenvolvedor.
 
-O objetivo de longo prazo é criar uma ponte segura entre ferramentas conversacionais de IA e fluxos locais de desenvolvimento sem expor todo o filesystem nem depender de acesso remoto inseguro.
+O objetivo de longo prazo é criar uma ponte segura entre ferramentas de IA conversacionais e fluxos locais de desenvolvimento sem expor o filesystem inteiro e sem depender de acesso remoto inseguro.
 
 ## Licença
 
-Este projeto está em desenvolvimento ativo. Uma licença será adicionada antes da primeira versão pública.
+Este projeto está atualmente em desenvolvimento ativo. Uma licença será adicionada antes da primeira release pública.

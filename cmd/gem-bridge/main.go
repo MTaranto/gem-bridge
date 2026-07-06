@@ -61,6 +61,7 @@ func main() {
 	}
 
 	fileTools := tools.NewFileTools(workspace)
+	gitTools := tools.NewGitTools(workspace)
 
 	var req Request
 	if err := json.Unmarshal([]byte(flag.Arg(0)), &req); err != nil {
@@ -124,6 +125,21 @@ func main() {
 			Data: map[string]string{
 				"path": req.Path,
 			},
+		})
+
+	case "gitStatus":
+		data, err := gitTools.StatusShort()
+		if err != nil {
+			printJSON(Response{
+				Success: false,
+				Error:   err.Error(),
+			})
+			os.Exit(1)
+		}
+
+		printJSON(Response{
+			Success: true,
+			Data:    data,
 		})
 
 	default:
