@@ -14,26 +14,55 @@ Este projeto é desenhado em torno de três princípios centrais:
 
 ## Funcionalidades atuais
 
+- Raiz de workspace configurável por `--workspace`
 - Resolução segura de paths dentro do workspace
 - Listagem de diretórios
 - Leitura de arquivos
-- Proteção contra paths absolutos e ataques de path traversal
+- Criação segura de arquivos por `writeFile`
+- Proteção contra paths vazios, paths absolutos, path traversal, paths Windows com unidade, paths UNC e escapes por symlink
+- Comportamento conservador de escrita que recusa sobrescrever arquivos existentes
+- Limite de tamanho para escrita de arquivos
 - Respostas JSON consistentes para resultados de execução de ferramentas
+- CI cross-platform em Linux, macOS e Windows
+
+## Documentação
+
+- [Arquitetura](./docs/ARCHITECTURE.pt-br.md)
+- [Modelo de Segurança](./docs/SECURITY_MODEL.pt-br.md)
+- [Contexto do Projeto](./docs/PROJECT_CONTEXT.md)
+
+As versões em inglês da documentação pública também estão disponíveis:
+
+- [README.md](./README.md)
+- [ARCHITECTURE.md](./docs/ARCHITECTURE.md)
+- [SECURITY_MODEL.md](./docs/SECURITY_MODEL.md)
 
 ## Estrutura do projeto
 
 ```text
 .
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── cmd/
 │   └── gem-bridge/
 │       └── main.go
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── ARCHITECTURE.pt-br.md
+│   ├── PROJECT_CONTEXT.md
+│   ├── SECURITY_MODEL.md
+│   └── SECURITY_MODEL.pt-br.md
 ├── internal/
 │   ├── security/
-│   │   └── workspace.go
+│   │   ├── workspace.go
+│   │   └── workspace_test.go
 │   └── tools/
-│       └── files.go
+│       ├── files.go
+│       └── files_test.go
 ├── go.mod
-└── README.md
+├── README.md
+└── README.pt-br.md
 ```
 
 ## Uso
@@ -43,19 +72,46 @@ Execute o projeto a partir da raiz do workspace.
 Listar arquivos no workspace atual:
 
 ```bash
-go run ./cmd/gem-bridge '{"tool":"listDirectory","path":"."}'
+go run ./cmd/gem-bridge --workspace . '{"tool":"listDirectory","path":"."}'
 ```
 
 Ler um arquivo:
 
 ```bash
-go run ./cmd/gem-bridge '{"tool":"readFile","path":"go.mod"}'
+go run ./cmd/gem-bridge --workspace . '{"tool":"readFile","path":"go.mod"}'
+```
+
+Criar um novo arquivo:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"writeFile","path":"notes.txt","content":"hello from gem bridge"}'
+```
+
+Ler o arquivo criado:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"readFile","path":"notes.txt"}'
+```
+
+Tentativas de sobrescrever um arquivo existente são bloqueadas na versão atual:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"writeFile","path":"notes.txt","content":"overwrite"}'
+```
+
+Resposta esperada:
+
+```json
+{
+  "success": false,
+  "error": "file already exists"
+}
 ```
 
 Tentativas de acessar arquivos fora do workspace são bloqueadas:
 
 ```bash
-go run ./cmd/gem-bridge '{"tool":"readFile","path":"../../.ssh/id_rsa"}'
+go run ./cmd/gem-bridge --workspace . '{"tool":"readFile","path":"../../.ssh/id_rsa"}'
 ```
 
 Resposta esperada:
@@ -67,13 +123,13 @@ Resposta esperada:
 }
 ```
 
-Quando executada via `go run`, essa requisição com falha também retorna `exit status 1`, o que é um comportamento esperado para a versão CLI atual.
+Quando executadas via `go run`, requisições com falha também retornam `exit status 1`, o que é um comportamento esperado para a versão CLI atual.
 
 ## Modelo de segurança
 
 Gem Bridge trata a raiz do workspace como uma fronteira de segurança.
 
-Todos os paths fornecidos pelo usuário devem ser relativos e são resolvidos pela camada de segurança antes que qualquer operação de filesystem seja executada. Paths absolutos e tentativas de path traversal são bloqueados para impedir acesso a arquivos fora do workspace autorizado.
+Todos os paths fornecidos pelo usuário devem ser relativos e são resolvidos pela camada de segurança antes que qualquer operação de filesystem seja executada. Paths vazios, paths absolutos, tentativas de path traversal, paths Windows com unidade, paths UNC e escapes por symlink são bloqueados para impedir acesso fora do workspace autorizado.
 
 Exemplos de paths bloqueados:
 
@@ -82,19 +138,44 @@ Exemplos de paths bloqueados:
 /home/user/.ssh/id_rsa
 ../../.env
 ../../.config
+C:\Users\user\.ssh\id_rsa
+C:/Users/user/.ssh/id_rsa
+\\server\share\secret.txt
+```
+
+A implementação atual de `writeFile` é intencionalmente conservadora. Ela cria apenas arquivos de texto novos, recusa sobrescrever arquivos existentes, limita o tamanho do conteúdo e resolve paths pela camada compartilhada de segurança do workspace antes de escrever no disco.
+
+## Integração contínua
+
+O repositório inclui um workflow do GitHub Actions que roda em pushes e pull requests para a `main`.
+
+A CI valida:
+
+```bash
+go fmt ./...
+go test ./...
+```
+
+em:
+
+```text
+ubuntu-latest
+macos-latest
+windows-latest
 ```
 
 ## Roadmap
 
-- Adicionar raiz de workspace configurável
-- Adicionar escrita de arquivos com regras explícitas de segurança
-- Adicionar ferramentas Git
+- Adicionar ferramentas Git:
+  - `gitStatus`
+  - `gitDiff`
+- Adicionar pacotes estruturados para request e response
 - Adicionar transporte WebSocket para desenvolvimento local
 - Adicionar integração com extensão de navegador
 - Adicionar suporte a Native Messaging
 - Adicionar fluxo de aprovação para operações sensíveis
-- Adicionar testes automatizados para segurança e comportamento das ferramentas
 - Adicionar logging estruturado
+- Expandir regras de mutação segura de arquivos quando necessário
 
 ## Por que este projeto existe
 

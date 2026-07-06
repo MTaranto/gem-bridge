@@ -16,23 +16,13 @@ The configured workspace root is the main security boundary.
 
 Gem Bridge may operate only inside the authorized workspace. Any request that attempts to access files, directories, commands, or Git operations outside this boundary must be rejected before the operation runs.
 
-This rule must apply equally to all current and future transports:
-
-- CLI
-- WebSocket
-- Browser extension
-- Native Messaging
-- Any future local protocol
-
 Security rules must live in shared internal packages, not inside a specific transport layer.
 
 ## Trust Boundaries
 
-Gem Bridge has the following trust boundaries:
-
 1. **AI client boundary**
    - Requests coming from an AI assistant are untrusted.
-   - Tool names, paths, arguments, and command parameters must be validated.
+   - Tool names, paths, arguments, content payloads, and command parameters must be validated.
 
 2. **Transport boundary**
    - CLI, WebSocket, and Native Messaging are only delivery mechanisms.
@@ -77,7 +67,7 @@ C:/Users/user/.ssh/id_rsa
 \\server\share\secret.txt
 ```
 
-Allowed paths must resolve to a location inside the authorized workspace after cleaning, joining, and symlink evaluation.
+Allowed paths must resolve to a location inside the authorized workspace after cleaning, joining, separator normalization, and symlink evaluation.
 
 ## Symlink Safety
 
@@ -85,60 +75,35 @@ Symlinks are security-sensitive because a path may look like it is inside the wo
 
 Gem Bridge must block symlink escapes by validating existing paths and parent paths before filesystem operations run.
 
-Example dangerous layout:
-
-```text
-workspace/
-  link-to-home -> /home/user
-```
-
-A request such as this must be rejected:
-
-```json
-{
-  "tool": "readFile",
-  "path": "link-to-home/.ssh/id_rsa"
-}
-```
-
-The security layer must ensure the final resolved path remains inside the workspace root.
-
 ## Read Operations
-
-Read operations are the safest initial filesystem capability, but they are still sensitive.
-
-Read tools must:
-
-- Require a relative path
-- Resolve the path through the workspace security layer
-- Refuse access outside the workspace
-- Return structured JSON errors
-- Avoid leaking host-specific filesystem details when possible
 
 Current read-oriented tools:
 
 - `listDirectory`
 - `readFile`
 
-Future read tools should follow the same security path before touching the disk.
+Read tools must require relative paths, resolve paths through the workspace security layer, refuse access outside the workspace, and return structured JSON errors.
 
 ## Write Operations
 
-Write operations are more dangerous than read operations and must be implemented with stricter rules.
+Current write-oriented tools:
 
-Future write tools must:
+- `writeFile`
 
-- Require relative paths
-- Resolve paths through the workspace security layer
-- Block traversal and symlink escapes
-- Refuse writes outside the workspace
-- Avoid overwriting existing files unless explicitly allowed
-- Consider file size limits
-- Return structured JSON errors
-- Be covered by automated tests
-- Eventually support user approval for sensitive writes
+The current `writeFile` implementation is intentionally conservative. It:
 
-Initial file writing should be narrow and explicit. Avoid broad tools that can modify arbitrary files without clear rules.
+- Requires a relative path
+- Resolves the path through the workspace security layer
+- Blocks traversal and symlink escapes
+- Refuses writes outside the workspace
+- Refuses to overwrite existing files
+- Enforces a maximum content size
+- Returns structured JSON errors
+- Is covered by automated tests
+
+This first version creates new text files only. Overwriting, patching, appending, deleting, or renaming files should remain separate future tools with explicit safety rules.
+
+Future write capabilities must avoid broad tools that can modify arbitrary files without clear rules.
 
 ## Command Execution Rules
 
@@ -162,17 +127,7 @@ Safer examples:
 - `gitStatus`
 - `gitDiff`
 
-Each command tool must:
-
-- Call a known executable
-- Use controlled arguments
-- Run inside the authorized workspace
-- Avoid shell interpolation
-- Avoid destructive behavior by default
-- Return structured output
-- Be tested where practical
-
-Dangerous commands and shell features must remain blocked unless a future approval model explicitly supports them.
+Each command tool must call a known executable, use controlled arguments, run inside the authorized workspace, avoid shell interpolation, avoid destructive behavior by default, return structured output, and be tested where practical.
 
 ## Git Operation Rules
 
@@ -182,8 +137,6 @@ Safer initial Git tools:
 
 - `gitStatus`
 - `gitDiff`
-
-These are read-oriented and useful for validation.
 
 More sensitive Git tools:
 
@@ -201,27 +154,13 @@ Git tools must run only inside the authorized workspace.
 
 Gem Bridge does not currently implement an approval flow, but the architecture should prepare for it.
 
-Future operations that may require approval include:
-
-- Writing files
-- Overwriting files
-- Deleting files
-- Running tests or build commands with side effects
-- Staging files
-- Creating commits
-- Switching branches
-- Merging branches
-- Pushing to remotes
-- Installing dependencies
-- Running any tool that may modify the local system
+Future operations that may require approval include overwriting files, deleting files, running commands with side effects, staging files, creating commits, switching branches, merging, pushing, installing dependencies, or running broader system-modifying tools.
 
 Approval should be explicit, auditable, and understandable to the user.
 
 ## Error Handling
 
 Security failures must return structured errors.
-
-A failed request should not reveal unnecessary host details.
 
 In CLI mode, returning a non-zero exit status for failed tool requests is acceptable.
 
@@ -231,18 +170,9 @@ In future daemon mode, a failed tool request must not crash the process. The dae
 
 Path safety must be validated across Linux, macOS, and Windows.
 
-Special care is required for:
+Special care is required for Unix absolute paths, Windows drive-letter paths, Windows UNC paths, mixed path separators, symlink and junction behavior, case sensitivity differences, config directory locations, and Native Messaging host registration paths.
 
-- Unix absolute paths
-- Windows drive-letter paths
-- Windows UNC paths
-- Mixed path separators
-- Symlink and junction behavior
-- Case sensitivity differences
-- Config directory locations
-- Native Messaging host registration paths
-
-Cross-platform CI should eventually run security tests on:
+Cross-platform CI currently runs Go formatting and tests on:
 
 ```text
 ubuntu-latest
@@ -260,7 +190,7 @@ Gem Bridge should not support these behaviors at the current stage:
 - GUI automation
 - Silent destructive operations
 - Sensitive Git operations without validation
-- Write tools without clear safety rules
+- Broad write tools without clear safety rules
 - Platform-specific shortcuts that bypass the shared security layer
 
 ## Testing Requirements
@@ -277,11 +207,13 @@ Current and future tests should cover:
 - Symlink escape rejection
 - Read access inside the workspace
 - Read access outside the workspace
-- Future write safety rules
+- Write creation inside the workspace
+- Write overwrite rejection
+- Write size limit rejection
+- Write rejection for unsafe paths
+- Write rejection for symlink parent escapes
 - Future command allowlist behavior
 - Future Git tool validation
-
-Security tests should be small, explicit, and easy to understand.
 
 ## Final Rule
 

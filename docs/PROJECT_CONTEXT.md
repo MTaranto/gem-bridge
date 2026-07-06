@@ -8,7 +8,7 @@ Gem Bridge
 
 Gem Bridge is a local-first AI tooling bridge written in Go.
 
-The goal is to build a secure local daemon that acts as a bridge between browser-based AI assistants and the user's local development environment. The daemon should expose controlled tools for filesystem access, development workflows, Git operations, and future browser integration without giving unrestricted access to the machine.
+The goal is to build a secure local daemon that acts as a bridge between browser-based AI assistants and the user's local development environment. The daemon exposes controlled tools for filesystem access, development workflows, Git operations, and future browser integration without giving unrestricted access to the machine.
 
 ## Current Repository
 
@@ -25,40 +25,44 @@ The project currently has a CLI-based Go prototype with:
 - `internal/security/workspace.go`
 - `internal/security/workspace_test.go`
 - `internal/tools/files.go`
+- `internal/tools/files_test.go`
+- `.github/workflows/ci.yml`
 - `docs/PROJECT_CONTEXT.md`
 - `docs/ARCHITECTURE.md`
 - `docs/ARCHITECTURE.pt-br.md`
+- `docs/SECURITY_MODEL.md`
+- `docs/SECURITY_MODEL.pt-br.md`
 - `README.md`
 - `README.pt-br.md`
 - `.gitignore`
 - `go.mod`
 
-The initial commit was created and pushed to GitHub:
+Confirmed project milestones:
 
 ```text
 feat: initialize secure local bridge
+feat: add configurable workspace root
+docs: add project context
+docs: add architecture overview
+docs: add brazilian portuguese documentation
+docs: add security model
+ci: add cross-platform go workflow
+fix: reject cross-platform absolute paths
+feat: add safe file writing
 ```
 
 Pull Request #1 was opened from `feat/configurable-workspace` into `main`, reviewed, and merged.
 
-The merged feature branch included:
-
-```text
-feat: add configurable workspace root
-docs: add project context
-```
-
-After the PR merge, the architecture overview was added directly to `main`:
-
-```text
-docs: add architecture overview
-```
+Pull Request #2 was opened from `feat/safe-file-writing` into `main`, passed CI, reviewed, and merged.
 
 The latest confirmed local state:
 
 - `main` is aligned with `origin/main`.
 - Working tree is clean.
-- Latest commit on `main`: `docs: add architecture overview`.
+- Latest merge commit on `main`: `Merge pull request #2 from MTaranto/feat/safe-file-writing`.
+- The local feature branch `feat/safe-file-writing` was deleted.
+- The remote feature branch `origin/feat/safe-file-writing` was pruned.
+- Cross-platform CI is passing.
 
 ## Core Principles
 
@@ -73,6 +77,7 @@ Gem Bridge should follow these principles:
    - Absolute paths must be rejected.
    - Path traversal must be blocked.
    - Symlink escapes must be detected and blocked.
+   - Windows drive paths and UNC paths must be rejected when received from clients.
 
 3. **Tool-agnostic protocol**
    - The daemon should not be tightly coupled to one AI provider.
@@ -88,6 +93,7 @@ Gem Bridge should follow these principles:
    - Git history should stay clean.
    - Feature branches should be used for code, security-sensitive changes, and larger documentation updates.
    - Commits should follow Conventional Commits with lowercase descriptions.
+   - Pull requests and CI should be used for meaningful code changes.
 
 ## Development Guidelines
 
@@ -113,7 +119,9 @@ Use Conventional Commits, for example:
 
 ```text
 feat: add configurable workspace root
-fix: block symlink workspace escape
+feat: add safe file writing
+fix: reject cross-platform absolute paths
+ci: add cross-platform go workflow
 docs: update project context
 docs: add architecture overview
 test: add workspace security tests
@@ -141,13 +149,24 @@ Current supported tools:
 
 - `listDirectory`
 - `readFile`
+- `writeFile`
 
-The current request format is:
+The current request format for reading is:
 
 ```json
 {
   "tool": "readFile",
   "path": "go.mod"
+}
+```
+
+The current request format for writing is:
+
+```json
+{
+  "tool": "writeFile",
+  "path": "notes.txt",
+  "content": "hello from gem bridge"
 }
 ```
 
@@ -180,13 +199,44 @@ Implemented behavior:
 - Workspace root is resolved to an absolute path.
 - Workspace root is resolved through symlink evaluation.
 - User paths are required to be relative.
+- Empty paths are rejected.
+- Unix absolute paths are rejected.
+- Windows drive-letter paths are rejected.
+- Windows UNC paths are rejected.
+- Mixed separators are normalized before path resolution.
 - Existing paths and parent paths are checked for symlink escapes.
 - Automated tests cover workspace path validation.
+- Cross-platform CI validates behavior on Linux, macOS, and Windows.
 
 Example usage:
 
 ```bash
 go run ./cmd/gem-bridge --workspace . '{"tool":"readFile","path":"README.md"}'
+```
+
+## Current File Tool Behavior
+
+Implemented tools:
+
+- `listDirectory`
+- `readFile`
+- `writeFile`
+
+Current `writeFile` behavior:
+
+- Creates new text files only.
+- Requires a relative path.
+- Resolves the path through `Workspace.ResolvePath`.
+- Refuses writes outside the workspace.
+- Refuses to overwrite existing files.
+- Enforces a maximum content size.
+- Returns structured JSON errors.
+- Has automated tests for successful writes, overwrite rejection, size limits, unsafe paths, and symlink parent escapes.
+
+Example usage:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"writeFile","path":"notes.txt","content":"hello from gem bridge"}'
 ```
 
 ## Security Model
@@ -201,7 +251,9 @@ The daemon must reject:
 - Absolute paths
 - Path traversal attempts
 - Paths escaping the workspace through symlinks
-- Future unsafe write targets
+- Windows drive-letter paths
+- Windows UNC paths
+- Unsafe write targets
 - Future unsafe shell commands
 
 Examples of blocked paths:
@@ -212,19 +264,20 @@ Examples of blocked paths:
 ../../.env
 ../../.config
 C:\Users\user\.ssh\id_rsa
+C:/Users/user/.ssh/id_rsa
 \\server\share\secret.txt
 ```
 
 ## Architecture Documentation
 
-The project now includes:
+The project includes:
 
 ```text
 docs/ARCHITECTURE.md
 docs/ARCHITECTURE.pt-br.md
 ```
 
-This document records the main architectural decisions:
+These documents record the main architectural decisions:
 
 - Keep the current prototype simple and CLI-based.
 - Separate responsibilities by domain before creating platform-specific abstractions.
@@ -232,7 +285,29 @@ This document records the main architectural decisions:
 - Keep the security layer shared across all future transports.
 - Avoid unrestricted shell execution.
 - Prefer explicit tools such as `gitStatus`, `gitDiff`, `goTest`, and `goFmt`.
-- Add cross-platform CI later for Linux, macOS, and Windows.
+- Run cross-platform CI for Linux, macOS, and Windows.
+
+## Security Documentation
+
+The project includes:
+
+```text
+docs/SECURITY_MODEL.md
+docs/SECURITY_MODEL.pt-br.md
+```
+
+These documents define:
+
+- Workspace trust boundary.
+- Filesystem security rules.
+- Symlink safety.
+- Read and write operation rules.
+- Command execution rules.
+- Git operation rules.
+- Approval flow expectations.
+- Error handling.
+- Cross-platform security considerations.
+- Testing requirements.
 
 ## Documentation Language Strategy
 
@@ -247,37 +322,49 @@ README.md -> README.pt-br.md
 README.pt-br.md -> README.md
 docs/ARCHITECTURE.md -> docs/ARCHITECTURE.pt-br.md
 docs/ARCHITECTURE.pt-br.md -> docs/ARCHITECTURE.md
+docs/SECURITY_MODEL.md -> docs/SECURITY_MODEL.pt-br.md
+docs/SECURITY_MODEL.pt-br.md -> docs/SECURITY_MODEL.md
 ```
 
-Future public documents should follow the same pattern, for example:
+## Continuous Integration
+
+The project includes GitHub Actions CI:
 
 ```text
-docs/SECURITY_MODEL.md
-docs/SECURITY_MODEL.pt-br.md
+.github/workflows/ci.yml
 ```
 
-## Cross-Platform Strategy
+The workflow runs on pushes and pull requests targeting `main`.
 
-Gem Bridge should support Linux, macOS, and Windows.
+It validates:
 
-The current focus is to keep the core logic portable while isolating platform-specific behavior only when necessary.
+```bash
+go fmt ./...
+go test ./...
+```
 
-Cross-platform concerns to handle carefully:
+on:
 
-- Filesystem path behavior
-- Windows absolute paths and UNC paths
-- Symlink handling
-- Local configuration directories through `os.UserConfigDir()`
-- Native Messaging host registration
-- Controlled command execution without exposing arbitrary shell access
+```text
+ubuntu-latest
+macos-latest
+windows-latest
+```
 
-Avoid broad premature abstractions such as a generic `OSAdapter` until real platform-specific needs appear.
+The first CI run revealed a real Windows path validation issue, which was fixed by rejecting cross-platform absolute path shapes regardless of the operating system running the daemon.
 
 ## Current Git History
 
 Confirmed relevant commits:
 
 ```text
+Merge pull request #2 from MTaranto/feat/safe-file-writing
+feat: add safe file writing
+fix: reject cross-platform absolute paths
+ci: add cross-platform go workflow
+docs: add security model
+docs: add brazilian portuguese documentation
+docs: update project context
 docs: add architecture overview
 Merge pull request #1 from MTaranto/feat/configurable-workspace
 docs: add project context
@@ -289,32 +376,32 @@ feat: initialize secure local bridge
 
 The next recommended steps are:
 
-1. Add `docs/SECURITY_MODEL.md` and `docs/SECURITY_MODEL.pt-br.md`.
-2. Document filesystem threat model and safety rules.
-3. Define safe file writing rules before implementing write support.
-4. Add safe file writing with strict tests.
-5. Add Git tools in small increments:
+1. Update public documentation to reflect `writeFile`, CI, and merged PR #2.
+2. Open a new ChatGPT thread inside the Gem Bridge project to keep context fresh.
+3. In the next thread, continue with Git tools in small increments:
    - `gitStatus`
    - `gitDiff`
-   - later: controlled commit support
+4. Keep command execution explicit and allowlisted.
+5. Avoid arbitrary shell execution.
 
 ## Near-Term Roadmap
 
 Recommended next features, in order:
 
-1. Add `docs/SECURITY_MODEL.md` and `docs/SECURITY_MODEL.pt-br.md`.
-2. Add safe file writing with strict rules.
-3. Add Git tools:
+1. Add Git tools:
    - `gitStatus`
    - `gitDiff`
-   - later: controlled commit support
-4. Add structured request and response packages.
-5. Add WebSocket transport for local development.
-6. Add browser extension prototype.
-7. Add Native Messaging support.
-8. Add approval flow for sensitive operations.
-9. Add structured logging.
-10. Add cross-platform CI for Linux, macOS, and Windows.
+2. Add structured request and response packages.
+3. Add WebSocket transport for local development.
+4. Add browser extension prototype.
+5. Add Native Messaging support.
+6. Add approval flow for sensitive operations.
+7. Add structured logging.
+8. Expand safe file mutation rules only when necessary:
+   - controlled overwrite
+   - append
+   - patch/update
+   - delete, if ever allowed
 
 ## Long-Term Vision
 
@@ -349,6 +436,7 @@ Future tool categories may include:
 
 The user prefers:
 
+- To be called Careca.
 - Explanations in Brazilian Portuguese.
 - Code comments in English.
 - Go code that is idiomatic, modular, and professional.
@@ -359,11 +447,15 @@ The user prefers:
 - Validation before commits.
 - Full-file replacements when that reduces syntax or continuity errors.
 - Using Git as the source of truth if the chat becomes long or context is uncertain.
+- After commit/push, check source code directly on GitHub when code verification is needed.
+- With uncommitted local changes, ask for `git status`, `git diff`, or file contents.
 - Avoiding unnecessary command-style boxes in explanations; reserve code blocks mainly for commands, code, filenames, commit messages, or exact outputs.
 
 ## Continuity Rule
 
-If there is uncertainty about the current code state, ask the user to provide one of the following before continuing:
+If there is uncertainty about the current code state after a commit/push, check GitHub first.
+
+If there are local uncommitted changes, ask the user to provide one of the following before continuing:
 
 ```bash
 git status
@@ -371,12 +463,12 @@ git diff
 git log --oneline --decorate --graph --all
 ```
 
-For file-specific uncertainty, ask for:
+For file-specific uncertainty with local uncommitted changes, ask for:
 
 ```bash
 sed -n '1,220p' path/to/file.go
 ```
 
-Do not ask for file content unnecessarily when the file is already available in the project sources and the local Git state is confirmed clean and aligned with `origin/main`.
+Do not ask for file content unnecessarily when the file is already available on GitHub and the local Git state is confirmed clean and aligned with `origin/main`.
 
 Do not guess the current local code state when Git output or file contents are needed.

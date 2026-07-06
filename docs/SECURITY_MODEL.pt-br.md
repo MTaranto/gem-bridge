@@ -16,23 +16,13 @@ A raiz do workspace configurado é a principal fronteira de segurança.
 
 O Gem Bridge só pode operar dentro do workspace autorizado. Qualquer requisição que tente acessar arquivos, diretórios, comandos ou operações Git fora dessa fronteira deve ser rejeitada antes da execução da operação.
 
-Essa regra deve valer igualmente para todos os transportes atuais e futuros:
-
-- CLI
-- WebSocket
-- Extensão de navegador
-- Native Messaging
-- Qualquer protocolo local futuro
-
 As regras de segurança devem ficar em pacotes internos compartilhados, não dentro de uma camada específica de transporte.
 
 ## Fronteiras de Confiança
 
-O Gem Bridge possui as seguintes fronteiras de confiança:
-
 1. **Fronteira do cliente de IA**
    - Requisições vindas de um assistente de IA não são confiáveis.
-   - Nomes de ferramentas, paths, argumentos e parâmetros de comando devem ser validados.
+   - Nomes de ferramentas, paths, argumentos, payloads de conteúdo e parâmetros de comando devem ser validados.
 
 2. **Fronteira de transporte**
    - CLI, WebSocket e Native Messaging são apenas mecanismos de entrega.
@@ -77,7 +67,7 @@ C:/Users/user/.ssh/id_rsa
 \\server\share\secret.txt
 ```
 
-Paths permitidos devem resolver para um local dentro do workspace autorizado depois de limpeza, junção e avaliação de symlinks.
+Paths permitidos devem resolver para um local dentro do workspace autorizado depois de limpeza, junção, normalização de separadores e avaliação de symlinks.
 
 ## Segurança com Symlinks
 
@@ -85,60 +75,35 @@ Symlinks são sensíveis para segurança porque um path pode parecer estar dentr
 
 O Gem Bridge deve bloquear escapes por symlink validando paths existentes e paths pais antes de executar operações no filesystem.
 
-Exemplo de estrutura perigosa:
-
-```text
-workspace/
-  link-to-home -> /home/user
-```
-
-Uma requisição como esta deve ser rejeitada:
-
-```json
-{
-  "tool": "readFile",
-  "path": "link-to-home/.ssh/id_rsa"
-}
-```
-
-A camada de segurança deve garantir que o path final resolvido continue dentro da raiz do workspace.
-
 ## Operações de Leitura
-
-Operações de leitura são a capacidade inicial mais segura do filesystem, mas ainda são sensíveis.
-
-Ferramentas de leitura devem:
-
-- Exigir path relativo
-- Resolver o path pela camada de segurança do workspace
-- Recusar acesso fora do workspace
-- Retornar erros em JSON estruturado
-- Evitar vazar detalhes desnecessários do filesystem do host quando possível
 
 Ferramentas atuais orientadas à leitura:
 
 - `listDirectory`
 - `readFile`
 
-Ferramentas futuras de leitura devem seguir o mesmo caminho de segurança antes de tocar no disco.
+Ferramentas de leitura devem exigir path relativo, resolver o path pela camada de segurança do workspace, recusar acesso fora do workspace e retornar erros em JSON estruturado.
 
 ## Operações de Escrita
 
-Operações de escrita são mais perigosas do que operações de leitura e devem ser implementadas com regras mais rígidas.
+Ferramentas atuais orientadas à escrita:
 
-Ferramentas futuras de escrita devem:
+- `writeFile`
 
-- Exigir paths relativos
-- Resolver paths pela camada de segurança do workspace
-- Bloquear traversal e escapes por symlink
-- Recusar escrita fora do workspace
-- Evitar sobrescrever arquivos existentes, exceto quando isso for explicitamente permitido
-- Considerar limites de tamanho de arquivo
-- Retornar erros em JSON estruturado
-- Ter cobertura por testes automatizados
-- Futuramente oferecer aprovação do usuário para escritas sensíveis
+A implementação atual de `writeFile` é intencionalmente conservadora. Ela:
 
-A escrita inicial de arquivos deve ser estreita e explícita. Devemos evitar ferramentas amplas que possam modificar arquivos arbitrários sem regras claras.
+- Exige path relativo
+- Resolve o path pela camada de segurança do workspace
+- Bloqueia traversal e escapes por symlink
+- Recusa escrita fora do workspace
+- Recusa sobrescrever arquivos existentes
+- Aplica limite máximo de tamanho do conteúdo
+- Retorna erros em JSON estruturado
+- É coberta por testes automatizados
+
+Esta primeira versão cria apenas arquivos de texto novos. Sobrescrever, aplicar patches, anexar conteúdo, deletar ou renomear arquivos devem permanecer como ferramentas futuras separadas, com regras explícitas de segurança.
+
+Capacidades futuras de escrita devem evitar ferramentas amplas que possam modificar arquivos arbitrários sem regras claras.
 
 ## Regras de Execução de Comandos
 
@@ -162,17 +127,7 @@ Exemplos mais seguros:
 - `gitStatus`
 - `gitDiff`
 
-Cada ferramenta de comando deve:
-
-- Chamar um executável conhecido
-- Usar argumentos controlados
-- Rodar dentro do workspace autorizado
-- Evitar interpolação de shell
-- Evitar comportamento destrutivo por padrão
-- Retornar saída estruturada
-- Ser testada quando possível
-
-Comandos perigosos e recursos de shell devem permanecer bloqueados, exceto se um modelo futuro de aprovação oferecer suporte explícito.
+Cada ferramenta de comando deve chamar um executável conhecido, usar argumentos controlados, rodar dentro do workspace autorizado, evitar interpolação de shell, evitar comportamento destrutivo por padrão, retornar saída estruturada e ser testada quando possível.
 
 ## Regras para Operações Git
 
@@ -182,8 +137,6 @@ Ferramentas Git iniciais mais seguras:
 
 - `gitStatus`
 - `gitDiff`
-
-Elas são orientadas à leitura e úteis para validação.
 
 Ferramentas Git mais sensíveis:
 
@@ -201,27 +154,13 @@ Ferramentas Git devem rodar apenas dentro do workspace autorizado.
 
 O Gem Bridge ainda não implementa um fluxo de aprovação, mas a arquitetura deve se preparar para isso.
 
-Operações futuras que podem exigir aprovação incluem:
-
-- Escrever arquivos
-- Sobrescrever arquivos
-- Deletar arquivos
-- Rodar testes ou comandos de build com efeitos colaterais
-- Adicionar arquivos ao stage
-- Criar commits
-- Trocar branches
-- Fazer merge de branches
-- Fazer push para remotos
-- Instalar dependências
-- Rodar qualquer ferramenta que possa modificar o sistema local
+Operações futuras que podem exigir aprovação incluem sobrescrever arquivos, deletar arquivos, rodar comandos com efeitos colaterais, adicionar arquivos ao stage, criar commits, trocar branches, fazer merge, fazer push, instalar dependências ou rodar ferramentas mais amplas que modifiquem o sistema.
 
 A aprovação deve ser explícita, auditável e compreensível para o usuário.
 
 ## Tratamento de Erros
 
 Falhas de segurança devem retornar erros estruturados.
-
-Uma requisição com falha não deve revelar detalhes desnecessários do host.
 
 No modo CLI, retornar um status diferente de zero para requisições de ferramenta com falha é aceitável.
 
@@ -231,18 +170,9 @@ No futuro modo daemon, uma falha de ferramenta não deve derrubar o processo. O 
 
 A segurança de paths deve ser validada em Linux, macOS e Windows.
 
-É preciso cuidado especial com:
+É preciso cuidado especial com paths absolutos Unix, paths Windows com letra de unidade, paths UNC no Windows, separadores de path misturados, comportamento de symlinks e junctions, diferenças de case sensitivity, localização de diretórios de configuração e paths de registro de host Native Messaging.
 
-- Paths absolutos Unix
-- Paths Windows com letra de unidade
-- Paths UNC no Windows
-- Separadores de path misturados
-- Comportamento de symlinks e junctions
-- Diferenças de case sensitivity
-- Localização de diretórios de configuração
-- Paths de registro de host Native Messaging
-
-A CI cross-platform deve futuramente executar testes de segurança em:
+A CI cross-platform atualmente executa formatação e testes Go em:
 
 ```text
 ubuntu-latest
@@ -260,7 +190,7 @@ O Gem Bridge não deve oferecer suporte aos seguintes comportamentos no estágio
 - Automação de GUI
 - Operações destrutivas silenciosas
 - Operações Git sensíveis sem validação
-- Ferramentas de escrita sem regras claras de segurança
+- Ferramentas amplas de escrita sem regras claras de segurança
 - Atalhos específicos de plataforma que ignorem a camada de segurança compartilhada
 
 ## Requisitos de Testes
@@ -277,11 +207,13 @@ Testes atuais e futuros devem cobrir:
 - Rejeição de escape por symlink
 - Leitura dentro do workspace
 - Leitura fora do workspace
-- Futuras regras de escrita segura
+- Criação de arquivo dentro do workspace
+- Rejeição de sobrescrita
+- Rejeição por limite de tamanho
+- Rejeição de escrita em paths inseguros
+- Rejeição de escrita através de symlink em diretório pai
 - Futuro comportamento de allowlist de comandos
 - Futura validação de ferramentas Git
-
-Testes de segurança devem ser pequenos, explícitos e fáceis de entender.
 
 ## Regra Final
 

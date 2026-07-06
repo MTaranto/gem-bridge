@@ -14,26 +14,55 @@ This project is designed around three core principles:
 
 ## Current Features
 
+- Configurable workspace root through `--workspace`
 - Safe workspace path resolution
 - Directory listing
 - File reading
-- Protection against absolute paths and path traversal attacks
+- Safe file creation through `writeFile`
+- Protection against empty paths, absolute paths, path traversal, Windows drive paths, UNC paths, and symlink escapes
+- Conservative write behavior that refuses to overwrite existing files
+- File write size limit
 - Consistent JSON responses for tool execution results
+- Cross-platform CI on Linux, macOS, and Windows
+
+## Documentation
+
+- [Architecture](./docs/ARCHITECTURE.md)
+- [Security Model](./docs/SECURITY_MODEL.md)
+- [Project Context](./docs/PROJECT_CONTEXT.md)
+
+Brazilian Portuguese versions are available for public-facing documentation:
+
+- [README.pt-br.md](./README.pt-br.md)
+- [ARCHITECTURE.pt-br.md](./docs/ARCHITECTURE.pt-br.md)
+- [SECURITY_MODEL.pt-br.md](./docs/SECURITY_MODEL.pt-br.md)
 
 ## Project Structure
 
 ```text
 .
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── cmd/
 │   └── gem-bridge/
 │       └── main.go
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── ARCHITECTURE.pt-br.md
+│   ├── PROJECT_CONTEXT.md
+│   ├── SECURITY_MODEL.md
+│   └── SECURITY_MODEL.pt-br.md
 ├── internal/
 │   ├── security/
-│   │   └── workspace.go
+│   │   ├── workspace.go
+│   │   └── workspace_test.go
 │   └── tools/
-│       └── files.go
+│       ├── files.go
+│       └── files_test.go
 ├── go.mod
-└── README.md
+├── README.md
+└── README.pt-br.md
 ```
 
 ## Usage
@@ -43,19 +72,46 @@ Run the project from the workspace root.
 List files in the current workspace:
 
 ```bash
-go run ./cmd/gem-bridge '{"tool":"listDirectory","path":"."}'
+go run ./cmd/gem-bridge --workspace . '{"tool":"listDirectory","path":"."}'
 ```
 
 Read a file:
 
 ```bash
-go run ./cmd/gem-bridge '{"tool":"readFile","path":"go.mod"}'
+go run ./cmd/gem-bridge --workspace . '{"tool":"readFile","path":"go.mod"}'
+```
+
+Create a new file:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"writeFile","path":"notes.txt","content":"hello from gem bridge"}'
+```
+
+Read the created file:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"readFile","path":"notes.txt"}'
+```
+
+Attempting to overwrite an existing file is blocked in the current version:
+
+```bash
+go run ./cmd/gem-bridge --workspace . '{"tool":"writeFile","path":"notes.txt","content":"overwrite"}'
+```
+
+Expected response:
+
+```json
+{
+  "success": false,
+  "error": "file already exists"
+}
 ```
 
 Attempting to access files outside the workspace is blocked:
 
 ```bash
-go run ./cmd/gem-bridge '{"tool":"readFile","path":"../../.ssh/id_rsa"}'
+go run ./cmd/gem-bridge --workspace . '{"tool":"readFile","path":"../../.ssh/id_rsa"}'
 ```
 
 Expected response:
@@ -67,13 +123,13 @@ Expected response:
 }
 ```
 
-When executed through `go run`, this failed request also returns `exit status 1`, which is expected behavior for the current CLI version.
+When executed through `go run`, failed requests also return `exit status 1`, which is expected behavior for the current CLI version.
 
 ## Security Model
 
 Gem Bridge treats the workspace root as a security boundary.
 
-All user-provided paths must be relative and are resolved through the security layer before any filesystem operation is executed. Absolute paths and path traversal attempts are blocked to prevent access to files outside the authorized workspace.
+All user-provided paths must be relative and are resolved through the security layer before any filesystem operation is executed. Empty paths, absolute paths, path traversal attempts, Windows drive paths, UNC paths, and symlink escapes are blocked to prevent access outside the authorized workspace.
 
 Examples of blocked paths:
 
@@ -82,19 +138,44 @@ Examples of blocked paths:
 /home/user/.ssh/id_rsa
 ../../.env
 ../../.config
+C:\Users\user\.ssh\id_rsa
+C:/Users/user/.ssh/id_rsa
+\\server\share\secret.txt
+```
+
+The current `writeFile` implementation is intentionally conservative. It creates new text files only, refuses to overwrite existing files, limits content size, and resolves paths through the shared workspace security layer before writing to disk.
+
+## Continuous Integration
+
+The repository includes a GitHub Actions workflow that runs on pushes and pull requests to `main`.
+
+The CI validates:
+
+```bash
+go fmt ./...
+go test ./...
+```
+
+on:
+
+```text
+ubuntu-latest
+macos-latest
+windows-latest
 ```
 
 ## Roadmap
 
-- Add configurable workspace root
-- Add file writing with explicit safety rules
-- Add Git tools
+- Add Git tools:
+  - `gitStatus`
+  - `gitDiff`
+- Add structured request and response packages
 - Add WebSocket transport for local development
 - Add browser extension integration
 - Add Native Messaging support
 - Add approval flow for sensitive operations
-- Add automated tests for security and tool behavior
 - Add structured logging
+- Expand safe file mutation rules when needed
 
 ## Why This Project Exists
 
