@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -40,6 +42,150 @@ func TestRunRespondsToPing(t *testing.T) {
 			"expected host gem-bridge-native-host, got %#v",
 			data["host"],
 		)
+	}
+}
+
+func TestRunReadsFileFromConfiguredWorkspace(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	expectedContent := "conteúdo secreto do teste"
+
+	filePath := filepath.Join(workspaceRoot, "teste.txt")
+	if err := os.WriteFile(filePath, []byte(expectedContent), 0644); err != nil {
+		t.Fatalf("expected test file creation to succeed: %v", err)
+	}
+
+	t.Setenv(workspaceEnvName, workspaceRoot)
+
+	input := frameMessage(
+		t,
+		[]byte(`{"type":"readFile","path":"teste.txt"}`),
+	)
+
+	var output bytes.Buffer
+
+	if err := run(&input, &output); err != nil {
+		t.Fatalf("expected native host to succeed: %v", err)
+	}
+
+	response := readResponse(t, &output)
+
+	if !response.Success {
+		t.Fatalf("expected successful response, got error %q", response.Error)
+	}
+
+	if response.Type != "fileContent" {
+		t.Fatalf("expected response type fileContent, got %q", response.Type)
+	}
+
+	data, ok := response.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected response data object, got %#v", response.Data)
+	}
+
+	if data["path"] != "teste.txt" {
+		t.Fatalf("expected path teste.txt, got %#v", data["path"])
+	}
+
+	if data["content"] != expectedContent {
+		t.Fatalf(
+			"expected content %q, got %#v",
+			expectedContent,
+			data["content"],
+		)
+	}
+
+	expectedSize := float64(len([]byte(expectedContent)))
+	if data["size"] != expectedSize {
+		t.Fatalf(
+			"expected size %.0f, got %#v",
+			expectedSize,
+			data["size"],
+		)
+	}
+}
+
+func TestRunRejectsReadFileWithoutPath(t *testing.T) {
+	t.Setenv(workspaceEnvName, t.TempDir())
+
+	input := frameMessage(t, []byte(`{"type":"readFile"}`))
+
+	var output bytes.Buffer
+
+	if err := run(&input, &output); err != nil {
+		t.Fatalf("expected invalid request to produce a response: %v", err)
+	}
+
+	response := readResponse(t, &output)
+
+	if response.Success {
+		t.Fatal("expected unsuccessful response")
+	}
+
+	if response.Error != "path is required for readFile" {
+		t.Fatalf("expected missing path error, got %q", response.Error)
+	}
+}
+
+func TestRunRejectsReadFileWithoutConfiguredWorkspace(t *testing.T) {
+	t.Setenv(workspaceEnvName, "")
+
+	input := frameMessage(
+		t,
+		[]byte(`{"type":"readFile","path":"teste.txt"}`),
+	)
+
+	var output bytes.Buffer
+
+	if err := run(&input, &output); err != nil {
+		t.Fatalf("expected invalid request to produce a response: %v", err)
+	}
+
+	response := readResponse(t, &output)
+
+	if response.Success {
+		t.Fatal("expected unsuccessful response")
+	}
+
+	expectedError := workspaceEnvName + " is not configured"
+	if response.Error != expectedError {
+		t.Fatalf("expected error %q, got %q", expectedError, response.Error)
+	}
+}
+
+func TestRunBlocksReadOutsideWorkspace(t *testing.T) {
+	root := t.TempDir()
+	workspaceRoot := filepath.Join(root, "workspace")
+
+	if err := os.Mkdir(workspaceRoot, 0755); err != nil {
+		t.Fatalf("expected workspace creation to succeed: %v", err)
+	}
+
+	outsideFile := filepath.Join(root, "secret.txt")
+	if err := os.WriteFile(outsideFile, []byte("outside"), 0644); err != nil {
+		t.Fatalf("expected outside file creation to succeed: %v", err)
+	}
+
+	t.Setenv(workspaceEnvName, workspaceRoot)
+
+	input := frameMessage(
+		t,
+		[]byte(`{"type":"readFile","path":"../secret.txt"}`),
+	)
+
+	var output bytes.Buffer
+
+	if err := run(&input, &output); err != nil {
+		t.Fatalf("expected blocked request to produce a response: %v", err)
+	}
+
+	response := readResponse(t, &output)
+
+	if response.Success {
+		t.Fatal("expected unsuccessful response")
+	}
+
+	if response.Error != "access outside the workspace is blocked" {
+		t.Fatalf("expected workspace escape error, got %q", response.Error)
 	}
 }
 

@@ -7,11 +7,16 @@ import (
 	"os"
 
 	"github.com/mtaranto/gem-bridge/internal/nativemessaging"
+	"github.com/mtaranto/gem-bridge/internal/security"
+	"github.com/mtaranto/gem-bridge/internal/tools"
 )
+
+const workspaceEnvName = "GEM_BRIDGE_WORKSPACE"
 
 // Request represents a message received from the browser extension.
 type Request struct {
 	Type string `json:"type"`
+	Path string `json:"path,omitempty"`
 }
 
 // Response represents a message returned to the browser extension.
@@ -76,10 +81,58 @@ func handleRequest(payload []byte) Response {
 			},
 		}
 
+	case "readFile":
+		return readFile(request)
+
 	default:
 		return Response{
 			Success: false,
 			Error:   "unsupported request type: " + request.Type,
 		}
+	}
+}
+
+func readFile(request Request) Response {
+	if request.Path == "" {
+		return Response{
+			Success: false,
+			Error:   "path is required for readFile",
+		}
+	}
+
+	workspaceRoot := os.Getenv(workspaceEnvName)
+	if workspaceRoot == "" {
+		return Response{
+			Success: false,
+			Error:   workspaceEnvName + " is not configured",
+		}
+	}
+
+	workspace, err := security.NewWorkspace(workspaceRoot)
+	if err != nil {
+		return Response{
+			Success: false,
+			Error:   "configure workspace: " + err.Error(),
+		}
+	}
+
+	fileTools := tools.NewFileTools(workspace)
+
+	content, err := fileTools.ReadFile(request.Path)
+	if err != nil {
+		return Response{
+			Success: false,
+			Error:   err.Error(),
+		}
+	}
+
+	return Response{
+		Success: true,
+		Type:    "fileContent",
+		Data: map[string]interface{}{
+			"path":    request.Path,
+			"content": content,
+			"size":    len([]byte(content)),
+		},
 	}
 }
