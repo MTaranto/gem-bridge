@@ -6,11 +6,13 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mtaranto/gem-bridge/internal/nativemessaging"
+	"github.com/mtaranto/gem-bridge/internal/tools"
 )
 
 func TestRunRespondsToPing(t *testing.T) {
@@ -189,6 +191,136 @@ func TestRunBlocksReadOutsideWorkspace(t *testing.T) {
 	}
 }
 
+func TestRunReturnsProjectSnapshot(t *testing.T) {
+	requireGitExecutable(t)
+
+	workspaceRoot := t.TempDir()
+
+	runGitCommand(t, workspaceRoot, "init")
+	runGitCommand(t, workspaceRoot, "checkout", "-b", "snapshot-test")
+
+	readmePath := filepath.Join(workspaceRoot, "README.md")
+	if err := os.WriteFile(
+		readmePath,
+		[]byte("# Snapshot test\n"),
+		0644,
+	); err != nil {
+		t.Fatalf("expected README creation to succeed: %v", err)
+	}
+
+	runGitCommand(t, workspaceRoot, "add", ".")
+	runGitCommand(
+		t,
+		workspaceRoot,
+		"-c", "user.name=Gem Bridge Tests",
+		"-c", "user.email=tests@example.com",
+		"commit",
+		"-m", "initial commit",
+	)
+
+	if err := os.WriteFile(
+		readmePath,
+		[]byte("# Snapshot test\n\nUpdated content.\n"),
+		0644,
+	); err != nil {
+		t.Fatalf("expected README update to succeed: %v", err)
+	}
+
+	t.Setenv(workspaceEnvName, workspaceRoot)
+
+	input := frameMessage(t, []byte(`{"type":"projectSnapshot"}`))
+
+	var output bytes.Buffer
+
+	if err := run(&input, &output); err != nil {
+		t.Fatalf("expected native host to succeed: %v", err)
+	}
+
+	response := readResponse(t, &output)
+
+	if !response.Success {
+		t.Fatalf("expected successful response, got error %q", response.Error)
+	}
+
+	if response.Type != "projectSnapshot" {
+		t.Fatalf(
+			"expected response type projectSnapshot, got %q",
+			response.Type,
+		)
+	}
+
+	encodedSnapshot, err := json.Marshal(response.Data)
+	if err != nil {
+		t.Fatalf("expected snapshot encoding to succeed: %v", err)
+	}
+
+	var snapshot tools.ProjectSnapshot
+
+	if err := json.Unmarshal(encodedSnapshot, &snapshot); err != nil {
+		t.Fatalf("expected snapshot decoding to succeed: %v", err)
+	}
+
+	if snapshot.Workspace != filepath.Base(workspaceRoot) {
+		t.Fatalf(
+			"expected workspace %q, got %q",
+			filepath.Base(workspaceRoot),
+			snapshot.Workspace,
+		)
+	}
+
+	if snapshot.Branch != "snapshot-test" {
+		t.Fatalf("expected branch snapshot-test, got %q", snapshot.Branch)
+	}
+
+	if !strings.Contains(snapshot.GitDiff, "+Updated content.") {
+		t.Fatalf(
+			"expected snapshot diff to include README update:\n%s",
+			snapshot.GitDiff,
+		)
+	}
+
+	var readmeFound bool
+
+	for _, file := range snapshot.Files {
+		if file.Path != "README.md" {
+			continue
+		}
+
+		readmeFound = true
+
+		if file.Content != "# Snapshot test\n\nUpdated content.\n" {
+			t.Fatalf("unexpected README content: %q", file.Content)
+		}
+	}
+
+	if !readmeFound {
+		t.Fatalf("expected README.md in snapshot files: %#v", snapshot.Files)
+	}
+}
+
+func TestRunRejectsProjectSnapshotWithoutConfiguredWorkspace(t *testing.T) {
+	t.Setenv(workspaceEnvName, "")
+
+	input := frameMessage(t, []byte(`{"type":"projectSnapshot"}`))
+
+	var output bytes.Buffer
+
+	if err := run(&input, &output); err != nil {
+		t.Fatalf("expected rejected request to produce a response: %v", err)
+	}
+
+	response := readResponse(t, &output)
+
+	if response.Success {
+		t.Fatal("expected unsuccessful response")
+	}
+
+	expectedError := workspaceEnvName + " is not configured"
+	if response.Error != expectedError {
+		t.Fatalf("expected error %q, got %q", expectedError, response.Error)
+	}
+}
+
 func TestRunReturnsErrorResponseForInvalidJSON(t *testing.T) {
 	input := frameMessage(t, []byte(`{"type":`))
 
@@ -296,4 +428,29 @@ func readResponse(t *testing.T, reader io.Reader) Response {
 	}
 
 	return response
+}
+
+func requireGitExecutable(t *testing.T) {
+	t.Helper()
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git executable is not available")
+	}
+}
+
+func runGitCommand(t *testing.T, directory string, args ...string) {
+	t.Helper()
+
+	command := exec.Command("git", args...)
+	command.Dir = directory
+
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf(
+			"git %s failed: %v\n%s",
+			strings.Join(args, " "),
+			err,
+			string(output),
+		)
+	}
 }

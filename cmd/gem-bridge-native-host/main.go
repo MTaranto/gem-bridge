@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -84,6 +85,9 @@ func handleRequest(payload []byte) Response {
 	case "readFile":
 		return readFile(request)
 
+	case "projectSnapshot":
+		return projectSnapshot()
+
 	default:
 		return Response{
 			Success: false,
@@ -100,19 +104,11 @@ func readFile(request Request) Response {
 		}
 	}
 
-	workspaceRoot := os.Getenv(workspaceEnvName)
-	if workspaceRoot == "" {
-		return Response{
-			Success: false,
-			Error:   workspaceEnvName + " is not configured",
-		}
-	}
-
-	workspace, err := security.NewWorkspace(workspaceRoot)
+	workspace, err := configuredWorkspace()
 	if err != nil {
 		return Response{
 			Success: false,
-			Error:   "configure workspace: " + err.Error(),
+			Error:   err.Error(),
 		}
 	}
 
@@ -135,4 +131,42 @@ func readFile(request Request) Response {
 			"size":    len([]byte(content)),
 		},
 	}
+}
+
+func projectSnapshot() Response {
+	workspace, err := configuredWorkspace()
+	if err != nil {
+		return Response{
+			Success: false,
+			Error:   err.Error(),
+		}
+	}
+
+	snapshot, err := tools.NewSnapshotTools(workspace).Build()
+	if err != nil {
+		return Response{
+			Success: false,
+			Error:   err.Error(),
+		}
+	}
+
+	return Response{
+		Success: true,
+		Type:    "projectSnapshot",
+		Data:    snapshot,
+	}
+}
+
+func configuredWorkspace() (*security.Workspace, error) {
+	workspaceRoot := os.Getenv(workspaceEnvName)
+	if workspaceRoot == "" {
+		return nil, errors.New(workspaceEnvName + " is not configured")
+	}
+
+	workspace, err := security.NewWorkspace(workspaceRoot)
+	if err != nil {
+		return nil, fmt.Errorf("configure workspace: %w", err)
+	}
+
+	return workspace, nil
 }
