@@ -2,6 +2,8 @@
 
 [Leia em português brasileiro](./README.pt-br.md)
 
+> **Project status:** This experimental project is currently paused and is being kept public as a study record and technical reference.
+
 Gem Bridge is a local AI tooling bridge written in Go.
 
 The goal of this project is to provide a secure local daemon that exposes controlled filesystem, Git, and development tools to an AI assistant running in a browser-based interface.
@@ -221,4 +223,4 @@ The long-term goal is to create a secure bridge between conversational AI tools 
 
 ## License
 
-This project is currently under active development. A license will be added before the first public release.
+This project does not currently include a license.
