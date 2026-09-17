@@ -2,6 +2,8 @@
 
 [Read in English](./README.md)
 
+> **Status do projeto:** este projeto experimental está pausado no momento e permanece público como registro de estudo e referência técnica.
+
 Gem Bridge é uma ponte local para ferramentas de IA escrita em Go.
 
 O objetivo deste projeto é fornecer um daemon local seguro que exponha ferramentas controladas de filesystem, Git e desenvolvimento para um assistente de IA executado em uma interface baseada em navegador.
@@ -221,4 +223,4 @@ O objetivo de longo prazo é criar uma ponte segura entre ferramentas de IA conv
 
 ## Licença
 
-Este projeto está atualmente em desenvolvimento ativo. Uma licença será adicionada antes da primeira release pública.
+Este projeto não possui uma licença no momento.
